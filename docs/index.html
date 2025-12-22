@@ -1,0 +1,169 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2487.5">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!doctype html&gt;</p>
+<p class="p1">&lt;html lang="en"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="utf-8"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;Lexington PD CFS Dashboard&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 18px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.controls { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>label { font-weight: 600; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>select, input[type="range"] { width: 100%; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tabs { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tabbtn { border: 1px solid #bbb; background: #f7f7f7; border-radius: 8px; padding: 8px 10px; cursor: pointer; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.tabbtn.active { background: #e8f0ff; border-color: #6b8cff; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.imgwrap { margin-top: 14px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>img { width: 100%; height: auto; border-radius: 10px; border: 1px solid #eee; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.small { color: #555; font-size: 13px; line-height: 1.35; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.title { font-size: 18px; font-weight: 700; margin: 0 0 6px 0; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.subtitle { margin: 0 0 10px 0; color: #444; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f1f1f1; font-size: 12px; margin-left: 6px; }</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div class="card"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;p class="title"&gt;Lexington PD — CFS Demand, Proactive Activity, and Response Time&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;p class="subtitle"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>Dropdown + quarter slider swaps pre-rendered maps.</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;span class="pill" id="buildstamp"&gt;&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/p&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="row"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card" style="flex: 1 1 520px;"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="controls"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;label for="denom"&gt;Call type&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;select id="denom"&gt;&lt;/select&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;label for="period"&gt;Quarter&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;input id="period" type="range" min="0" max="0" value="0" step="1"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;div class="small"&gt;Selected: &lt;span class="mono" id="periodLabel"&gt;&lt;/span&gt;&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="tabs"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="tabbtn active" data-view="hotspot"&gt;Hotspots&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="tabbtn" data-view="overlay"&gt;Proactive vs Demand&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="tabbtn" data-view="diff"&gt;Difference&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="tabbtn" data-view="rt_map"&gt;Response Time (Map)&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;button class="tabbtn" data-view="rt_trend"&gt;Response Time (Trend)&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="small" style="margin-top:10px;"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;b&gt;Hotspots&lt;/b&gt; shows where calls cluster for the selected call type.</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;b&gt;Proactive&lt;/b&gt; is a proxy (traffic/property-check with very short dispatch→arrive).</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;b&gt;Difference&lt;/b&gt; is proactive density minus demand density (normalized each quarter).</p>
+<p class="p1"><span class="Apple-converted-space">          </span>Response time uses &lt;b&gt;Call→Arrive&lt;/b&gt;.</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/p&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="small"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>CSV tables are in &lt;span class="mono"&gt;docs/tables/&lt;/span&gt;.</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;div class="card" style="flex: 2 1 620px;"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="imgwrap"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>&lt;img id="mainImg" alt="Map output"/&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="small" id="missingNote" style="display:none;"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>This view is missing for the selected call type/quarter (usually because counts were too low).</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/p&gt;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;script&gt;</p>
+<p class="p1">let manifest = null;</p>
+<p class="p1">let currentView = "hotspot";</p>
+<p class="p2"><br></p>
+<p class="p1">function keyFor(view, denom, period) {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (view === "rt_trend") return "rt_trend_systemwide";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (view === "rt_map") return `rt_map__${period}`;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return `${view}__${denom}__${period}`;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function setActiveTab(view) {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>currentView = view;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll(".tabbtn").forEach(b =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.classList.toggle("active", b.dataset.view === view);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>render();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function render() {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (!manifest) return;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const denom = document.getElementById("denom").value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const idx = parseInt(document.getElementById("period").value, 10);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const period = manifest.periods[idx];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("periodLabel").textContent = period;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const k = keyFor(currentView, denom, period);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const rel = manifest.files[k];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const img = document.getElementById("mainImg");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const note = document.getElementById("missingNote");</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (!rel) {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>img.removeAttribute("src");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>note.style.display = "block";</p>
+<p class="p1"><span class="Apple-converted-space">    </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>note.style.display = "none";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>img.src = rel;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">async function init() {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const res = await fetch("manifest.json");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>manifest = await res.json();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.getElementById("buildstamp").textContent = `Built: ${manifest.generated_utc} UTC`;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const denomSel = document.getElementById("denom");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>manifest.denoms.forEach(d =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const opt = document.createElement("option");</p>
+<p class="p1"><span class="Apple-converted-space">    </span>opt.value = d;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>opt.textContent = d;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>denomSel.appendChild(opt);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>denomSel.value = manifest.denoms.includes("all_calls") ? "all_calls" : manifest.denoms[0];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const slider = document.getElementById("period");</p>
+<p class="p1"><span class="Apple-converted-space">  </span>slider.min = 0;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>slider.max = (manifest.periods.length - 1).toString();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>slider.value = (manifest.periods.length - 1).toString();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>denomSel.addEventListener("change", render);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>slider.addEventListener("input", render);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>document.querySelectorAll(".tabbtn").forEach(b =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>b.addEventListener("click", () =&gt; setActiveTab(b.dataset.view));</p>
+<p class="p1"><span class="Apple-converted-space">  </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>render();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">init();</p>
+<p class="p1">&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
