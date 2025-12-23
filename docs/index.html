@@ -3,24 +3,23 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Lexington PD CFS Dashboard</title>
+  <title>Lexington PD — Calls for Service</title>
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 18px; }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
-    .controls { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; }
-    label { font-weight: 600; }
-    select, input[type="range"] { width: 100%; }
-    .tabs { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-    .tabbtn { border: 1px solid #bbb; background: #f7f7f7; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
-    .tabbtn.active { background: #e8f0ff; border-color: #6b8cff; }
-    .imgwrap { margin-top: 14px; }
-    img { width: 100%; height: auto; border-radius: 10px; border: 1px solid #eee; }
-    .small { color: #555; font-size: 13px; line-height: 1.35; }
-    .title { font-size: 18px; font-weight: 700; margin: 0 0 6px 0; }
-    .subtitle { margin: 0 0 10px 0; color: #444; }
-    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f1f1f1; font-size: 12px; margin-left: 6px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+    .card { border:1px solid #ddd; border-radius:10px; padding:14px; }
+    .controls { display:grid; grid-template-columns:160px 1fr; gap:10px; align-items:center; }
+    label { font-weight:600; }
+    select, input[type="range"] { width:100%; }
+    .tabs { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+    .tabbtn { border:1px solid #bbb; background:#f7f7f7; border-radius:8px; padding:8px 10px; cursor:pointer; }
+    .tabbtn.active { background:#e8f0ff; border-color:#6b8cff; }
+    img { width:100%; height:auto; border-radius:10px; border:1px solid #eee; }
+    .small { color:#555; font-size:13px; line-height:1.35; }
+    .title { font-size:18px; font-weight:700; margin:0 0 6px 0; }
+    .subtitle { margin:0 0 10px 0; color:#444; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f1f1f1; font-size:12px; margin-left:6px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   </style>
 </head>
@@ -39,10 +38,13 @@
         <label for="denom">Call type</label>
         <select id="denom"></select>
 
-        <label for="period">Year</label>
+        <label for="period">Time</label>
         <div>
           <input id="period" type="range" min="0" max="0" value="0" step="1"/>
-          <div class="small">Selected: <span class="mono" id="periodLabel"></span></div>
+          <div class="small">
+            Selected: <span class="mono" id="periodLabel"></span>
+            <span class="pill mono" id="modePill" style="margin-left:8px;"></span>
+          </div>
         </div>
       </div>
 
@@ -54,10 +56,10 @@
       </div>
 
       <p class="small" style="margin-top:10px;">
-        <b>Hotspots</b> shows where calls cluster for the selected call type.
-        <b>Proactive</b> shows proactive activity density.
-        <b>Difference</b> shows proactive minus demand density (annual, normalized).
-        <b>Response Time</b> shows mean call→arrival time (minutes), systemwide.
+        <b>Hotspots</b>: brighter areas = more calls in that area (relative within the map).<br/>
+        <b>Proactive</b>: brighter areas = more proactive activity (relative within the map).<br/>
+        <b>Difference</b>: <b>red</b> = relatively more proactive than demand; <b>blue</b> = relatively less proactive than demand.<br/>
+        <b>Response time</b>: mean minutes from call received to first unit arrival (call→arrival).
       </p>
     </div>
 
@@ -66,7 +68,7 @@
         <img id="mainImg" alt="Dashboard output"/>
       </div>
       <p class="small" id="missingNote" style="display:none;">
-        This view is unavailable for the selected year or call type (typically due to very low call counts).
+        This view is unavailable for the selected time/call type (often due to low call counts).
       </p>
     </div>
   </div>
@@ -76,6 +78,22 @@
 let manifest = null;
 let currentView = "hotspot";
 
+// Determine repo base for GitHub Pages project sites
+function getBasePath() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  return parts.length ? `/${parts[0]}` : "";
+}
+
+// Always fetch from repo root manifest (path-safe)
+function manifestUrl() {
+  return `${getBasePath()}/manifest.json`;
+}
+
+// Smooth slider scheme (uses alpha frames):
+// value 0  -> "all"
+// values 1.. -> segments between years using steps [0,20,40,60,80]
+const stepTags = [0, 20, 40, 60, 80];
+
 function setActiveTab(view) {
   currentView = view;
   document.querySelectorAll(".tabbtn").forEach(b => {
@@ -84,42 +102,84 @@ function setActiveTab(view) {
   render();
 }
 
-function imagePath(view, denom, period) {
-  if (view === "rt_trend") return "rt/rt_system_trend.png";
-  return `maps/${view}_${denom}_${period}.png`;
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function computeSelection(v) {
+  if (v === 0) {
+    return { periodLabel: "All time", modeLabel: "All-time view", filePeriod: "all" };
+  }
+
+  const years = manifest.years; // ["2022","2023",...]
+  const k = v - 1;
+  const seg = Math.floor(k / stepTags.length); // 0..(years.length-2)
+  const sidx = k % stepTags.length;            // 0..4
+  const y0 = years[seg];
+  const y1 = years[seg + 1];
+  const alphaTag = stepTags[sidx];
+
+  const label = (alphaTag === 0 || !y1) ? y0 : `${y0} → ${y1} (${alphaTag}%)`;
+  return {
+    periodLabel: label,
+    modeLabel: `Year view: ${y0}`,
+    filePeriod: y0,
+    y0, y1, alphaTag
+  };
+}
+
+function imagePath(view, denom, sel) {
+  const base = getBasePath();
+
+  if (view === "rt_trend") {
+    // Show by-denominator trend (breakdown)
+    return `${base}/rt/rt_by_denom_trend.png`;
+  }
+
+  if (sel.filePeriod === "all") {
+    return `${base}/maps/${view}_${denom}_all.png`;
+  }
+
+  if (sel.alphaTag && sel.alphaTag > 0 && sel.y1) {
+    return `${base}/maps/${view}_${denom}_${sel.y0}_to_${sel.y1}_a${pad2(sel.alphaTag)}.png`;
+  }
+
+  return `${base}/maps/${view}_${denom}_${sel.filePeriod}.png`;
 }
 
 function render() {
   if (!manifest) return;
 
   const denom = document.getElementById("denom").value;
-  const idx = parseInt(document.getElementById("period").value, 10);
-  const period = manifest.periods[idx];
+  const slider = document.getElementById("period");
+  const v = parseInt(slider.value, 10);
 
-  document.getElementById("periodLabel").textContent = (period === "all") ? "All time" : period;
+  const sel = computeSelection(v);
+
+  document.getElementById("periodLabel").textContent = sel.periodLabel;
+  document.getElementById("modePill").textContent = sel.modeLabel;
 
   const img = document.getElementById("mainImg");
   const note = document.getElementById("missingNote");
-  const src = imagePath(currentView, denom, period);
+  const src = imagePath(currentView, denom, sel);
 
-  fetch(src, { method: "HEAD" }).then(res => {
-    if (!res.ok) {
-      img.removeAttribute("src");
-      note.style.display = "block";
-    } else {
-      note.style.display = "none";
-      img.src = src;
-    }
-  });
+  // Use img load/error (no HEAD requests)
+  note.style.display = "none";
+  img.onload = () => { note.style.display = "none"; };
+  img.onerror = () => {
+    img.removeAttribute("src");
+    note.style.display = "block";
+  };
+  img.src = src;
 }
 
 async function init() {
-  const res = await fetch("manifest.json");
+  const res = await fetch(manifestUrl(), { cache: "no-store" });
   manifest = await res.json();
 
-  document.getElementById("buildstamp").textContent = `Built: ${manifest.generated_at}`;
+  document.getElementById("buildstamp").textContent =
+    `Built: ${manifest.generated_at || "unknown"}`;
 
   const denomSel = document.getElementById("denom");
+  denomSel.innerHTML = "";
   manifest.denominators.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d;
@@ -128,10 +188,15 @@ async function init() {
   });
   denomSel.value = manifest.denominators[0];
 
+  // Slider: 0 = all-time; then (years.length-1) segments * 5 substeps
+  const years = manifest.years;
+  const segments = Math.max(0, years.length - 1);
+  const maxVal = segments * stepTags.length;
+
   const slider = document.getElementById("period");
   slider.min = 0;
-  slider.max = (manifest.periods.length - 1).toString();
-  slider.value = slider.max;
+  slider.max = String(maxVal);
+  slider.value = 0; // ALWAYS start on all-time
 
   denomSel.addEventListener("change", render);
   slider.addEventListener("input", render);
