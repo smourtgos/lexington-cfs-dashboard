@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Lexington PD CFS Dashboard</title>
+
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 18px; }
     .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
@@ -23,63 +24,57 @@
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   </style>
 </head>
+
 <body>
-  <div class="card">
-    <p class="title">Lexington PD — CFS Demand, Proactive Activity, and Response Time</p>
-    <p class="subtitle">
-      Dropdown + quarter slider swaps pre-rendered maps.
-      <span class="pill" id="buildstamp"></span>
-    </p>
+<div class="card">
+  <p class="title">Lexington PD — Calls for Service</p>
+  <p class="subtitle">
+    Demand, proactive activity, spatial differences, and response time trends
+    <span class="pill" id="buildstamp"></span>
+  </p>
 
-    <div class="row">
-      <div class="card" style="flex: 1 1 520px;">
-        <div class="controls">
-          <label for="denom">Call type</label>
-          <select id="denom"></select>
+  <div class="row">
+    <div class="card" style="flex: 1 1 520px;">
+      <div class="controls">
+        <label for="denom">Call type</label>
+        <select id="denom"></select>
 
-          <label for="period">Quarter</label>
-          <div>
-            <input id="period" type="range" min="0" max="0" value="0" step="1"/>
-            <div class="small">Selected: <span class="mono" id="periodLabel"></span></div>
-          </div>
+        <label for="period">Year</label>
+        <div>
+          <input id="period" type="range" min="0" max="0" value="0" step="1"/>
+          <div class="small">Selected: <span class="mono" id="periodLabel"></span></div>
         </div>
-
-        <div class="tabs">
-          <button class="tabbtn active" data-view="hotspot">Hotspots</button>
-          <button class="tabbtn" data-view="overlay">Proactive vs Demand</button>
-          <button class="tabbtn" data-view="diff">Difference</button>
-          <button class="tabbtn" data-view="rt_map">Response Time (Map)</button>
-          <button class="tabbtn" data-view="rt_trend">Response Time (Trend)</button>
-        </div>
-
-        <p class="small" style="margin-top:10px;">
-          <b>Hotspots</b> shows where calls cluster for the selected call type.
-          <b>Proactive</b> is a proxy (traffic/property-check with very short dispatch→arrive).
-          <b>Difference</b> is proactive density minus demand density (normalized each quarter).
-          Response time uses <b>Call→Arrive</b>.
-        </p>
       </div>
 
-      <div class="card" style="flex: 2 1 620px;">
-        <div class="imgwrap">
-          <img id="mainImg" alt="Map output"/>
-        </div>
-        <p class="small" id="missingNote" style="display:none;">
-          This view is missing for the selected call type/quarter (usually because counts were too low).
-        </p>
+      <div class="tabs">
+        <button class="tabbtn active" data-view="hotspot">Hotspots</button>
+        <button class="tabbtn" data-view="proactive">Proactive</button>
+        <button class="tabbtn" data-view="diff">Difference</button>
+        <button class="tabbtn" data-view="rt_trend">Response Time (Trend)</button>
       </div>
+
+      <p class="small" style="margin-top:10px;">
+        <b>Hotspots</b> shows where calls cluster for the selected call type.
+        <b>Proactive</b> shows proactive activity density.
+        <b>Difference</b> shows proactive minus demand density (annual, normalized).
+        <b>Response Time</b> shows mean call→arrival time (minutes), systemwide.
+      </p>
+    </div>
+
+    <div class="card" style="flex: 2 1 620px;">
+      <div class="imgwrap">
+        <img id="mainImg" alt="Dashboard output"/>
+      </div>
+      <p class="small" id="missingNote" style="display:none;">
+        This view is unavailable for the selected year or call type (typically due to very low call counts).
+      </p>
     </div>
   </div>
+</div>
 
 <script>
 let manifest = null;
 let currentView = "hotspot";
-
-function keyFor(view, denom, period) {
-  if (view === "rt_trend") return "rt_trend_systemwide";
-  if (view === "rt_map") return `rt_map__${period}`;
-  return `${view}__${denom}__${period}`;
-}
 
 function setActiveTab(view) {
   currentView = view;
@@ -89,6 +84,11 @@ function setActiveTab(view) {
   render();
 }
 
+function imagePath(view, denom, period) {
+  if (view === "rt_trend") return "rt/rt_system_trend.png";
+  return `maps/${view}_${denom}_${period}.png`;
+}
+
 function render() {
   if (!manifest) return;
 
@@ -96,42 +96,42 @@ function render() {
   const idx = parseInt(document.getElementById("period").value, 10);
   const period = manifest.periods[idx];
 
-  document.getElementById("periodLabel").textContent = period;
-
-  const k = keyFor(currentView, denom, period);
-  const rel = manifest.files[k];
+  document.getElementById("periodLabel").textContent = (period === "all") ? "All time" : period;
 
   const img = document.getElementById("mainImg");
   const note = document.getElementById("missingNote");
+  const src = imagePath(currentView, denom, period);
 
-  if (!rel) {
-    img.removeAttribute("src");
-    note.style.display = "block";
-    return;
-  }
-  note.style.display = "none";
-  img.src = rel;
+  fetch(src, { method: "HEAD" }).then(res => {
+    if (!res.ok) {
+      img.removeAttribute("src");
+      note.style.display = "block";
+    } else {
+      note.style.display = "none";
+      img.src = src;
+    }
+  });
 }
 
 async function init() {
   const res = await fetch("manifest.json");
   manifest = await res.json();
 
-  document.getElementById("buildstamp").textContent = `Built: ${manifest.generated_utc} UTC`;
+  document.getElementById("buildstamp").textContent = `Built: ${manifest.generated_at}`;
 
   const denomSel = document.getElementById("denom");
-  manifest.denoms.forEach(d => {
+  manifest.denominators.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d;
     opt.textContent = d;
     denomSel.appendChild(opt);
   });
-  denomSel.value = manifest.denoms.includes("all_calls") ? "all_calls" : manifest.denoms[0];
+  denomSel.value = manifest.denominators[0];
 
   const slider = document.getElementById("period");
   slider.min = 0;
   slider.max = (manifest.periods.length - 1).toString();
-  slider.value = (manifest.periods.length - 1).toString();
+  slider.value = slider.max;
 
   denomSel.addEventListener("change", render);
   slider.addEventListener("input", render);
