@@ -1,6 +1,6 @@
 {
-  "generated_at": "2025-12-22 18:46:24.636998",
-  "denominators": ["burglary", "domestic_problem", "suspicious", "violent_crime"],
+  "generated_at": "2025-12-22 19:26:53.961021",
+  "denominators": ["burglary", "domestic_problem", "suspicious", "violent_crime", "traffic"],
   "periods": ["all", "2022", "2023", "2024", "2025"],
   "years": ["2022", "2023", "2024", "2025"],
   "alpha_steps": [0.2, 0.4, 0.6, 0.8],

@@ -1,33 +1,37 @@
+###############################################################################
+# 1) WRITE: 01_build_site_assets.R  (full replacement)
+###############################################################################
 # 01_build_site_assets.R
-# Static GitHub Pages assets builder for Lexington CAD dashboard
-# ------------------------------------------------------------
-# HARD REQUIREMENTS FROM SCOTT:
-# - DO NOT change coordinate approach: use geo_x/geo_y in EPSG:2273 -> 4326
-# - Use Lexington "places" boundary (cb=FALSE, year=2023)
-# - Keep OSM bbox workflow
-# - Response times in MINUTES (not seconds)
-# - Mean (not median) RT
-# - Annual + All-time, and keep whole time period available
-# - Denominators ONLY: burglary, domestic_problem, suspicious, violent_crime
-# - traffic != traffic_stop (do not combine; traffic not a denominator here)
-# - Tabs: hotspot, proactive, difference, response time, response time trend
-# - Response time is NOT a map: table + trend plot
-# - Slider smoother: export alpha-blended frames between adjacent years
-# ------------------------------------------------------------
+# Build static assets (maps + response-time outputs) for GitHub Pages (docs/)
+# -------------------------------------------------------------------------
+# REQUIREMENTS:
+# - DO NOT change coordinate approach: geo_x/geo_y in EPSG:2273 -> lon/lat EPSG:4326
+# - Boundary: places(state="SC", cb=FALSE, year=2023), NAME=="Lexington"
+# - OSM streets/water/rivers from bbox
+# - Denominators: burglary, domestic_problem, suspicious, violent_crime, traffic
+#   (traffic_stop is NOT combined with traffic)
+# - Annual + all-time
+# - Response times in MINUTES, MEAN (not median)
+# - Tabs supported by outputs: hotspot, proactive, diff, rt_trend (NOT a map)
+# - Smooth slider: generate alpha-blended frames between adjacent years (a20/a40/a60/a80)
+# - Legends: officer-readable (Low→High, More→Less), no numeric tick labels
+# -------------------------------------------------------------------------
 
 suppressPackageStartupMessages({
-  library(tidyverse)
+  library(dplyr)
   library(lubridate)
-  library(janitor)
   library(sf)
+  library(ggplot2)
+  library(MASS)
+  library(jsonlite)
   library(tigris)
   library(osmdata)
-  library(viridis)
-  library(MASS)
-  library(colorspace)
+  library(stringr)
   library(readr)
-  library(jsonlite)
-  library(ggplot2)
+  library(janitor)
+  library(colorspace)
+  library(viridis)
+  library(grid)   # unit()
 })
 
 options(tigris_use_cache = TRUE)
@@ -50,18 +54,13 @@ dir.create(tbl_dir, showWarnings = FALSE, recursive = TRUE)
 # -------------------------
 # Load data
 # -------------------------
-cad_data <- readRDS(rds_path)
-
-# Make sure names are clean (your original pipeline did this)
-cad_data <- cad_data %>% clean_names()
+cad_data <- readRDS(rds_path) %>% janitor::clean_names()
 
 # ------------------------------------------------------------------
-# 1) FIX COORDINATES — EPSG:2273 (YOUR EXACT APPROACH)
+# COORDINATES (KEEP EXACT APPROACH)
 # ------------------------------------------------------------------
 cad_sf <- cad_data %>%
-  st_as_sf(coords = c("geo_x", "geo_y"),
-           crs = 2273,
-           remove = FALSE) %>%
+  st_as_sf(coords = c("geo_x", "geo_y"), crs = 2273, remove = FALSE) %>%
   st_transform(4326)
 
 coords <- st_coordinates(cad_sf)
@@ -69,25 +68,18 @@ cad_sf$lon <- coords[,1]
 cad_sf$lat <- coords[,2]
 
 # ------------------------------------------------------------------
-# 2) REAL Lexington County boundary (YOUR EXACT APPROACH)
+# Lexington boundary (KEEP EXACT APPROACH)
 # ------------------------------------------------------------------
 lexington_boundary <- places(state = "SC", cb = FALSE, year = 2023) %>%
   filter(NAME == "Lexington") %>%
   st_transform(4326)
 
-# ------------------------------------------------------------------
-# 3) Correct bounding box (YOUR EXACT APPROACH)
-# ------------------------------------------------------------------
 bbox <- st_bbox(lexington_boundary)
-bbox_num <- c(
-  xmin = bbox$xmin,
-  ymin = bbox$ymin,
-  xmax = bbox$xmax,
-  ymax = bbox$ymax
-)
+bbox_num <- c(xmin = bbox$xmin, ymin = bbox$ymin, xmax = bbox$xmax, ymax = bbox$ymax)
+bbox_vec <- c(bbox$xmin, bbox$xmax, bbox$ymin, bbox$ymax)
 
 # ------------------------------------------------------------------
-# 4) OSM features inside bounding box ONLY (YOUR EXACT APPROACH)
+# OSM layers (KEEP EXACT APPROACH)
 # ------------------------------------------------------------------
 osm_q <- opq(bbox = bbox_num)
 
@@ -104,7 +96,7 @@ rivers <- osm_q %>%
   osmdata_sf()
 
 # ------------------------------------------------------------------
-# 5) CLEAN POINTS AND CLIP TO COUNTY (YOUR EXACT FILTER)
+# CLEAN POINTS AND CLIP TO COUNTY (KEEP YOUR ORIGINAL FILTER)
 # ------------------------------------------------------------------
 cad_sf_clean <- cad_sf %>%
   filter(
@@ -115,14 +107,13 @@ cad_sf_clean <- cad_sf %>%
 cad_sf_clip <- cad_sf_clean[lexington_boundary, ]
 
 # ------------------------------------------------------------------
-# 6) DENOMINATORS (ONLY THESE FOUR)
+# DENOMINATORS (NOW INCLUDE TRAFFIC; DO NOT COMBINE traffic_stop)
 # ------------------------------------------------------------------
-denoms <- c("burglary", "domestic_problem", "suspicious", "violent_crime")
+denoms <- c("burglary", "domestic_problem", "suspicious", "violent_crime", "traffic")
 
 # ------------------------------------------------------------------
-# 7) TIME PERIODS: ANNUAL + ALL-TIME
+# TIME PERIODS: ANNUAL + ALL-TIME
 # ------------------------------------------------------------------
-# Use call_time if present; else fall back to call_datetime (your file has both)
 time_col <- if ("call_time" %in% names(cad_sf_clip)) "call_time" else "call_datetime"
 
 cad_sf_clip <- cad_sf_clip %>%
@@ -140,10 +131,7 @@ years_vec <- cad_sf_clip %>%
 periods <- c("all", as.character(years_vec))
 
 # ------------------------------------------------------------------
-# 8) PROACTIVE FLAG (KEEP YOUR ORIGINAL LOGIC, BUT FIX ONE THING:
-#    - You wanted minutes for response times.
-#    - Also: your old proactive logic checked dispatch->arrive <= 10 secs.
-#      We'll keep that EXACT condition, but make it explicit and robust.
+# PROACTIVE FLAG (KEEP YOUR EXISTING LOGIC)
 # ------------------------------------------------------------------
 cad_sf_clip <- cad_sf_clip %>%
   mutate(
@@ -155,9 +143,7 @@ cad_sf_clip <- cad_sf_clip %>%
   )
 
 # ------------------------------------------------------------------
-# 9) RESPONSE TIMES IN MINUTES (NOT SECONDS)
-#    Your current rt_* fields in the RDS appear to be seconds.
-#    We will (re)compute cleanly from timestamps and store *_min variables.
+# RESPONSE TIMES IN MINUTES (MEAN), computed from timestamps
 # ------------------------------------------------------------------
 cad_sf_clip <- cad_sf_clip %>%
   mutate(
@@ -167,22 +153,17 @@ cad_sf_clip <- cad_sf_clip %>%
     rt_on_scene_min           = as.numeric(difftime(last_cleared, first_arrived, units = "mins"))
   ) %>%
   mutate(
-    # Basic sanity trims to avoid garbage dominating means
-    rt_call_to_dispatch_min   = if_else(rt_call_to_dispatch_min   < 0 | rt_call_to_dispatch_min   > 60,  NA_real_, rt_call_to_dispatch_min),
-    rt_dispatch_to_arrive_min = if_else(rt_dispatch_to_arrive_min < 0 | rt_dispatch_to_arrive_min > 60,  NA_real_, rt_dispatch_to_arrive_min),
-    rt_call_to_arrive_min     = if_else(rt_call_to_arrive_min     < 0 | rt_call_to_arrive_min     > 120, NA_real_, rt_call_to_arrive_min),
+    # sanity trims to protect the mean
+    rt_call_to_dispatch_min   = if_else(rt_call_to_dispatch_min   < 0 | rt_call_to_dispatch_min   > 60,   NA_real_, rt_call_to_dispatch_min),
+    rt_dispatch_to_arrive_min = if_else(rt_dispatch_to_arrive_min < 0 | rt_dispatch_to_arrive_min > 60,   NA_real_, rt_dispatch_to_arrive_min),
+    rt_call_to_arrive_min     = if_else(rt_call_to_arrive_min     < 0 | rt_call_to_arrive_min     > 120,  NA_real_, rt_call_to_arrive_min),
     rt_on_scene_min           = if_else(rt_on_scene_min           < 0 | rt_on_scene_min           > 24*60, NA_real_, rt_on_scene_min)
   )
 
 # ------------------------------------------------------------------
-# 10) MAP LAYERS (YOUR STYLE): HOTSPOT, PROACTIVE, DIFFERENCE
-#     But built as static images for each denom and period.
+# KDE helpers (for diff alpha blends we use raster)
 # ------------------------------------------------------------------
-
-# KDE grid bounds
-bbox_vec <- c(bbox$xmin, bbox$xmax, bbox$ymin, bbox$ymax)
-
-make_kde <- function(df, h=c(0.015,0.015), n=300) {
+make_kde <- function(df, h = c(0.015, 0.015), n = 300) {
   MASS::kde2d(
     x = df$lon,
     y = df$lat,
@@ -210,19 +191,28 @@ make_diff_df <- function(kde_pro, kde_den, pow = 0.8) {
     mutate(diff = as.vector(diff_stretch))
 }
 
+blend_kde <- function(k0, k1, a) {
+  out <- k0
+  out$z <- (1 - a) * k0$z + a * k1$z
+  out
+}
+
+# ------------------------------------------------------------------
+# Base map layers
+# ------------------------------------------------------------------
 plot_base_layers <- function() {
   ggplot() +
     { if (!is.null(water$osm_polygons))
-      geom_sf(data = water$osm_polygons, fill = "#6baed6", color = NA, alpha = 0.9) } +
+      geom_sf(data = water$osm_polygons, fill = "#6baed6", color = NA, alpha = 0.85) } +
     { if (!is.null(rivers$osm_lines))
       geom_sf(data = rivers$osm_lines, color = "#2171b5", linewidth = 0.7, alpha = 0.9) } +
     geom_sf(
       data = streets$osm_lines %>% filter(highway %in% c("motorway","trunk","primary")),
-      color = "black", linewidth = 1.1
+      color = "black", linewidth = 1.0, alpha = 0.85
     ) +
     geom_sf(
       data = streets$osm_lines %>% filter(!highway %in% c("motorway","trunk","primary")),
-      color = "gray50", linewidth = 0.3, alpha = 0.6
+      color = "gray50", linewidth = 0.3, alpha = 0.55
     ) +
     geom_sf(data = lexington_boundary, fill = NA, color = "black", linewidth = 0.8) +
     coord_sf(
@@ -231,14 +221,21 @@ plot_base_layers <- function() {
       expand = FALSE
     ) +
     theme_minimal(base_size = 14) +
-    theme(panel.grid = element_blank())
+    theme(
+      panel.grid = element_blank(),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank()
+    )
 }
 
 save_png <- function(p, path, w = 1400, h = 1000) {
   ggsave(path, p, width = w/150, height = h/150, dpi = 150)
 }
 
-# Precompute proactive KDE by period (same for all denoms; we still export per-denom files for UI simplicity)
+# ------------------------------------------------------------------
+# Precompute proactive KDE by period (annual + all)
+# ------------------------------------------------------------------
 pro_kde_by_period <- list()
 for (per in periods) {
   df_per <- if (per == "all") {
@@ -246,13 +243,13 @@ for (per in periods) {
   } else {
     cad_sf_clip %>% filter(as.character(year) == per) %>% st_drop_geometry()
   }
+  
   df_pro <- df_per %>% filter(proactive == TRUE)
   pro_kde_by_period[[per]] <- if (nrow(df_pro) >= 25) normalize_kde(make_kde(df_pro)) else NULL
 }
 
 # Denom KDE by denom/period
 den_kde_by_denom_period <- list()
-
 for (d in denoms) {
   den_kde_by_denom_period[[d]] <- list()
   for (per in periods) {
@@ -266,12 +263,14 @@ for (d in denoms) {
   }
 }
 
-# --- Render static PNGs: hotspot / proactive / diff
+# ------------------------------------------------------------------
+# Render annual + all-time PNGs (hotspot, proactive, diff)
+# Officer-readable legends (no numeric tick labels)
+# ------------------------------------------------------------------
 for (d in denoms) {
-  message("Rendering static maps for denom: ", d)
+  message("Rendering maps for denom: ", d)
   
   for (per in periods) {
-    
     kd_den <- den_kde_by_denom_period[[d]][[per]]
     kd_pro <- pro_kde_by_period[[per]]
     
@@ -298,15 +297,20 @@ for (d in denoms) {
         scale_fill_viridis(option = "inferno") +
         scale_alpha(range = c(0.2, 0.7), guide = "none") +
         labs(
-          title = paste("Hotspots for", d, "—", ifelse(per == "all","All time", per)),
-          subtitle = "Street-level map with highways, water, and KDE hotspots",
-          x = "Longitude", y = "Latitude"
+          title = paste("Hotspots —", d, "—", ifelse(per == "all", "All time", per)),
+          subtitle = "Brighter = more calls in that area (relative within this map)",
+          fill = "Call concentration\n(lower → higher)"
+        ) +
+        theme(
+          legend.text = element_blank(),
+          legend.ticks = element_blank(),
+          legend.key.height = unit(28, "pt")
         )
       
       save_png(p_hot, file.path(maps_dir, paste0("hotspot_", d, "_", per, ".png")))
     }
     
-    # PROACTIVE (proactive only; still exported under each denom name for UI consistency)
+    # PROACTIVE (proactive only; exported per denom for UI consistency)
     if (!is.null(kd_pro)) {
       cad_pro <- cad_sf_clip[lexington_boundary, ] %>%
         filter(if (per == "all") TRUE else as.character(year) == per) %>%
@@ -329,15 +333,20 @@ for (d in denoms) {
         scale_fill_viridis(option = "magma") +
         scale_alpha(range = c(0.15, 0.7), guide = "none") +
         labs(
-          title = paste("Proactive activity —", ifelse(per == "all","All time", per)),
-          subtitle = "Magma KDE = proactive work (traffic stops + property checks)",
-          x = "Longitude", y = "Latitude"
+          title = paste("Proactive Activity —", ifelse(per == "all", "All time", per)),
+          subtitle = "Brighter = more proactive activity (relative within this map)",
+          fill = "Proactive activity\n(lower → higher)"
+        ) +
+        theme(
+          legend.text = element_blank(),
+          legend.ticks = element_blank(),
+          legend.key.height = unit(28, "pt")
         )
       
       save_png(p_pro, file.path(maps_dir, paste0("proactive_", d, "_", per, ".png")))
     }
     
-    # DIFFERENCE (proactive - denom), your RdBu diverging style
+    # DIFFERENCE (proactive - denom)
     if (!is.null(kd_pro) && !is.null(kd_den)) {
       df_diff <- make_diff_df(kd_pro, kd_den, pow = 0.8)
       lims <- range(df_diff$diff, na.rm = TRUE)
@@ -350,21 +359,26 @@ for (d in denoms) {
           rev = TRUE,
           limits = lims
         ) +
-        geom_sf(data = streets$osm_lines, color="black", linewidth=0.3, alpha=0.7, inherit.aes = FALSE) +
+        geom_sf(data = streets$osm_lines, color="black", linewidth=0.28, alpha=0.65, inherit.aes = FALSE) +
         { if (!is.null(rivers$osm_lines))
-          geom_sf(data = rivers$osm_lines, color="#2171b5", linewidth=0.6, alpha=0.9, inherit.aes = FALSE) } +
+          geom_sf(data = rivers$osm_lines, color="#2171b5", linewidth=0.55, alpha=0.9, inherit.aes = FALSE) } +
         geom_sf(data = lexington_boundary, fill=NA, color="black", linewidth=0.8, inherit.aes = FALSE) +
-        coord_sf(
-          xlim = c(bbox$xmin, bbox$xmax),
-          ylim = c(bbox$ymin, bbox$ymax),
-          expand = FALSE
+        coord_sf(xlim = c(bbox$xmin, bbox$xmax), ylim = c(bbox$ymin, bbox$ymax), expand = FALSE) +
+        theme_minimal(base_size = 14) +
+        theme(
+          panel.grid = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          legend.text = element_blank(),
+          legend.ticks = element_blank(),
+          legend.key.height = unit(28, "pt")
         ) +
         labs(
-          title = paste("Proactive –", d, "Difference —", ifelse(per == "all","All time", per)),
-          fill = "Proactive – Denom\nBlue = underserved\nRed = overserved"
-        ) +
-        theme_minimal(base_size = 14) +
-        theme(panel.grid = element_blank())
+          title = paste("Proactive vs Demand —", d, "—", ifelse(per == "all", "All time", per)),
+          subtitle = "Red = relatively MORE proactive than demand • Blue = relatively LESS proactive than demand",
+          fill = "Relative coverage\n(less → more)"
+        )
       
       save_png(p_diff, file.path(maps_dir, paste0("diff_", d, "_", per, ".png")))
     }
@@ -373,17 +387,10 @@ for (d in denoms) {
 } # denom
 
 # ------------------------------------------------------------------
-# 11) SMOOTHER SLIDER: alpha-blended frames between adjacent years
-#     (site JS can use these when slider is between years)
+# SMOOTH SLIDER FRAMES: alpha blends between adjacent years
+# Produces: *_<denom>_<y0>_to_<y1>_a20.png etc.
 # ------------------------------------------------------------------
-alpha_steps <- seq(0.2, 0.8, by = 0.2)  # 0.2, 0.4, 0.6, 0.8
-
-blend_kde <- function(k0, k1, a) {
-  # assumes same x/y grid (true here)
-  out <- k0
-  out$z <- (1 - a) * k0$z + a * k1$z
-  out
-}
+alpha_steps <- c(0.2, 0.4, 0.6, 0.8)
 
 for (d in denoms) {
   for (i in seq_along(years_vec)[-length(years_vec)]) {
@@ -395,14 +402,12 @@ for (d in denoms) {
     kd0_pro <- pro_kde_by_period[[y0]]
     kd1_pro <- pro_kde_by_period[[y1]]
     
-    # hotspot blends
+    # HOTSPOT blend (raster, simple)
     if (!is.null(kd0_den) && !is.null(kd1_den)) {
       for (a in alpha_steps) {
-        cad_den_blend <- NULL # we render via raster from KDE df for consistency
         kdA <- blend_kde(kd0_den, kd1_den, a)
-        
-        # render a raster plot (fast and consistent)
         dfA <- expand.grid(lon = kdA$x, lat = kdA$y) %>% mutate(z = as.vector(kdA$z))
+        
         pA <- ggplot() +
           geom_raster(data = dfA, aes(lon, lat, fill = z), alpha = 0.85) +
           scale_fill_viridis(option = "inferno") +
@@ -411,8 +416,8 @@ for (d in denoms) {
             geom_sf(data = rivers$osm_lines, color="#2171b5", linewidth=0.5, alpha=0.9, inherit.aes = FALSE) } +
           geom_sf(data = lexington_boundary, fill=NA, color="black", linewidth=0.8, inherit.aes = FALSE) +
           coord_sf(xlim=c(bbox$xmin,bbox$xmax), ylim=c(bbox$ymin,bbox$ymax), expand=FALSE) +
-          labs(title = paste("Hotspot", d, y0, "→", y1, "α", a), fill = NULL) +
-          theme_void()
+          theme_void() +
+          theme(legend.position = "none")
         
         save_png(
           pA,
@@ -422,11 +427,12 @@ for (d in denoms) {
       }
     }
     
-    # proactive blends
+    # PROACTIVE blend
     if (!is.null(kd0_pro) && !is.null(kd1_pro)) {
       for (a in alpha_steps) {
         kdA <- blend_kde(kd0_pro, kd1_pro, a)
         dfA <- expand.grid(lon = kdA$x, lat = kdA$y) %>% mutate(z = as.vector(kdA$z))
+        
         pA <- ggplot() +
           geom_raster(data = dfA, aes(lon, lat, fill = z), alpha = 0.85) +
           scale_fill_viridis(option = "magma") +
@@ -435,8 +441,8 @@ for (d in denoms) {
             geom_sf(data = rivers$osm_lines, color="#2171b5", linewidth=0.5, alpha=0.9, inherit.aes = FALSE) } +
           geom_sf(data = lexington_boundary, fill=NA, color="black", linewidth=0.8, inherit.aes = FALSE) +
           coord_sf(xlim=c(bbox$xmin,bbox$xmax), ylim=c(bbox$ymin,bbox$ymax), expand=FALSE) +
-          labs(title = paste("Proactive", y0, "→", y1, "α", a), fill = NULL) +
-          theme_void()
+          theme_void() +
+          theme(legend.position = "none")
         
         save_png(
           pA,
@@ -446,7 +452,7 @@ for (d in denoms) {
       }
     }
     
-    # diff blends (blend surfaces then diff)
+    # DIFF blend (blend surfaces then diff)
     if (!is.null(kd0_den) && !is.null(kd1_den) && !is.null(kd0_pro) && !is.null(kd1_pro)) {
       for (a in alpha_steps) {
         kdA_den <- blend_kde(kd0_den, kd1_den, a)
@@ -463,9 +469,8 @@ for (d in denoms) {
             geom_sf(data = rivers$osm_lines, color="#2171b5", linewidth=0.5, alpha=0.9, inherit.aes = FALSE) } +
           geom_sf(data = lexington_boundary, fill=NA, color="black", linewidth=0.8, inherit.aes = FALSE) +
           coord_sf(xlim=c(bbox$xmin,bbox$xmax), ylim=c(bbox$ymin,bbox$ymax), expand=FALSE) +
-          labs(title = paste("Diff", d, y0, "→", y1, "α", a),
-               fill = "Proactive–Denom") +
-          theme_void()
+          theme_void() +
+          theme(legend.position = "none")
         
         save_png(
           pA,
@@ -474,35 +479,29 @@ for (d in denoms) {
         )
       }
     }
-    
   }
 }
 
 # ------------------------------------------------------------------
-# 12) RESPONSE TIME OUTPUTS (NOT MAPS)
-#     - systemwide annual + all-time
-#     - by-denominator annual + all-time
-#     - trend PNGs
-#     MEAN, in MINUTES
+# RESPONSE TIME OUTPUTS (NOT MAPS)
+# - systemwide annual + all-time
+# - by-denominator annual + all-time
+# - trend PNGs
+# Response time definition:
+#   Minutes from call received (call_time/call_datetime) to first unit arrival (first_arrived)
 # ------------------------------------------------------------------
-
 q90 <- function(x) suppressWarnings(quantile(x, 0.90, na.rm = TRUE, names = FALSE))
-
 rt_base <- cad_sf_clip %>% st_drop_geometry()
 
-# Systemwide annual + all
 rt_system_year <- rt_base %>%
   filter(!is.na(year)) %>%
-  mutate(year = as.character(year)) %>%      # <-- FIX: coerce to character
+  mutate(year = as.character(year)) %>%
   group_by(year) %>%
   summarise(
     n = n(),
-    mean_call_to_dispatch_min   = mean(rt_call_to_dispatch_min, na.rm = TRUE),
-    mean_dispatch_to_arrive_min = mean(rt_dispatch_to_arrive_min, na.rm = TRUE),
-    mean_call_to_arrive_min     = mean(rt_call_to_arrive_min, na.rm = TRUE),
-    p90_call_to_arrive_min      = q90(rt_call_to_arrive_min),
-    mean_on_scene_min           = mean(rt_on_scene_min, na.rm = TRUE),
-    proactive_share             = mean(proactive, na.rm = TRUE),
+    mean_call_to_arrive_min = mean(rt_call_to_arrive_min, na.rm = TRUE),
+    p90_call_to_arrive_min  = q90(rt_call_to_arrive_min),
+    proactive_share         = mean(proactive, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   arrange(as.integer(year))
@@ -511,22 +510,17 @@ rt_system_all <- rt_base %>%
   summarise(
     year = "all",
     n = n(),
-    mean_call_to_dispatch_min   = mean(rt_call_to_dispatch_min, na.rm = TRUE),
-    mean_dispatch_to_arrive_min = mean(rt_dispatch_to_arrive_min, na.rm = TRUE),
-    mean_call_to_arrive_min     = mean(rt_call_to_arrive_min, na.rm = TRUE),
-    p90_call_to_arrive_min      = q90(rt_call_to_arrive_min),
-    mean_on_scene_min           = mean(rt_on_scene_min, na.rm = TRUE),
-    proactive_share             = mean(proactive, na.rm = TRUE)
+    mean_call_to_arrive_min = mean(rt_call_to_arrive_min, na.rm = TRUE),
+    p90_call_to_arrive_min  = q90(rt_call_to_arrive_min),
+    proactive_share         = mean(proactive, na.rm = TRUE)
   )
 
 rt_system <- bind_rows(rt_system_all, rt_system_year)
-
 write_csv(rt_system, file.path(tbl_dir, "rt_system_annual.csv"))
 
-# By denominator annual + all (using the 4 denoms)
 rt_byden_year <- rt_base %>%
   filter(!is.na(year), nature_recat %in% denoms) %>%
-  mutate(year = as.character(year)) %>%      # <-- FIX
+  mutate(year = as.character(year)) %>%
   group_by(nature_recat, year) %>%
   summarise(
     n = n(),
@@ -548,7 +542,6 @@ rt_byden_all <- rt_base %>%
   )
 
 rt_byden <- bind_rows(rt_byden_all, rt_byden_year)
-
 write_csv(rt_byden, file.path(tbl_dir, "rt_by_denom_annual.csv"))
 
 # Trend plot: systemwide
@@ -558,37 +551,39 @@ p_rt_system <- ggplot(rt_system %>% filter(year != "all"),
   geom_point() +
   labs(
     title = "Response Time Trend (Systemwide)",
+    subtitle = "Mean minutes from call received to first unit arrival",
     x = "Year",
-    y = "Mean call-to-arrive (minutes)"
+    y = "Mean call→arrival (minutes)"
   ) +
   theme_minimal(base_size = 13)
 
 ggsave(file.path(rt_dir, "rt_system_trend.png"), p_rt_system, width = 10, height = 6, dpi = 150)
 
-# Trend plot: by denom (all four lines on one chart)
+# Trend plot: by denom (all lines)
 p_rt_byden <- ggplot(rt_byden %>% filter(year != "all"),
                      aes(x = as.integer(year), y = mean_call_to_arrive_min, group = nature_recat, color = nature_recat)) +
   geom_line() +
   geom_point() +
   labs(
-    title = "Response Time Trend by Denominator",
+    title = "Response Time Trend by Call Type",
+    subtitle = "Mean minutes from call received to first unit arrival",
     x = "Year",
-    y = "Mean call-to-arrive (minutes)",
-    color = "Denominator"
+    y = "Mean call→arrival (minutes)",
+    color = "Call type"
   ) +
   theme_minimal(base_size = 13)
 
 ggsave(file.path(rt_dir, "rt_by_denom_trend.png"), p_rt_byden, width = 10, height = 6, dpi = 150)
 
 # ------------------------------------------------------------------
-# 13) Manifest for the website
+# Manifest (write to docs + ALSO root for path safety)
 # ------------------------------------------------------------------
 manifest <- list(
   generated_at = as.character(Sys.time()),
   denominators = denoms,
   periods = periods,
   years = as.character(years_vec),
-  alpha_steps = alpha_steps,
+  alpha_steps = c(0.2, 0.4, 0.6, 0.8),
   files = list(
     hotspot = "docs/maps/hotspot_{denom}_{period}.png",
     proactive = "docs/maps/proactive_{denom}_{period}.png",
@@ -604,5 +599,6 @@ manifest <- list(
 )
 
 writeLines(toJSON(manifest, pretty = TRUE, auto_unbox = TRUE), manifest_path)
+writeLines(toJSON(manifest, pretty = TRUE, auto_unbox = TRUE), "manifest.json")
 
 message("DONE. Assets written to: ", docs_dir)
