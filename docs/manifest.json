@@ -1,16 +1,16 @@
 {
-  "generated_at": "2025-12-22 19:50:43.899555",
+  "generated_at": "2025-12-22 20:02:33.001507",
   "denominators": ["burglary", "domestic_problem", "suspicious", "violent_crime", "traffic"],
-  "periods": ["all", "2022", "2023", "2024", "2025"],
-  "years": ["2022", "2023", "2024", "2025"],
+  "periods": "all",
+  "years": {},
   "alpha_steps": {},
   "files": {
     "hotspot": "docs/maps/hotspot_{denom}_{period}.png",
     "proactive": "docs/maps/proactive_{denom}_{period}.png",
     "diff": "docs/maps/diff_{denom}_{period}.png",
-    "rt_system_csv": "docs/tables/rt_system_annual.csv",
-    "rt_byden_csv": "docs/tables/rt_by_denom_annual.csv",
-    "rt_system_trend_png": "docs/rt/rt_system_trend.png",
-    "rt_byden_trend_png": "docs/rt/rt_by_denom_trend.png"
-  }
+    "rt_system_csv": "docs/tables/rt_system_alltime.csv",
+    "rt_byden_csv": "docs/tables/rt_by_denom_alltime.csv",
+    "rt_alltime_png": "docs/rt/rt_alltime.png"
+  },
+  "note": "Sept 2022 – Sept 2025"
 }
