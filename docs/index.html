@@ -11,7 +11,7 @@
     .card { border:1px solid #ddd; border-radius:10px; padding:14px; }
     .controls { display:grid; grid-template-columns:160px 1fr; gap:10px; align-items:center; }
     label { font-weight:600; }
-    select, input[type="range"] { width:100%; }
+    select { width:100%; }
     .tabs { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
     .tabbtn { border:1px solid #bbb; background:#f7f7f7; border-radius:8px; padding:8px 10px; cursor:pointer; }
     .tabbtn.active { background:#e8f0ff; border-color:#6b8cff; }
@@ -20,7 +20,6 @@
     .title { font-size:18px; font-weight:700; margin:0 0 6px 0; }
     .subtitle { margin:0 0 10px 0; color:#444; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f1f1f1; font-size:12px; margin-left:6px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   </style>
 </head>
 
@@ -28,7 +27,8 @@
 <div class="card">
   <p class="title">Lexington PD — Calls for Service</p>
   <p class="subtitle">
-    Demand, proactive activity, spatial differences, and response time trends
+    Demand, proactive activity, spatial differences, and response time
+    <span class="pill">Sept 2022 – Sept 2025</span>
     <span class="pill" id="buildstamp"></span>
   </p>
 
@@ -37,38 +37,27 @@
       <div class="controls">
         <label for="denom">Call type</label>
         <select id="denom"></select>
-
-        <label for="period">Time</label>
-        <div>
-          <input id="period" type="range" min="0" max="0" value="0" step="1"/>
-          <div class="small">
-            Selected: <span class="mono" id="periodLabel"></span>
-            <span class="pill mono" id="modePill" style="margin-left:8px;"></span>
-          </div>
-        </div>
       </div>
 
       <div class="tabs">
         <button class="tabbtn active" data-view="hotspot">Hotspots</button>
         <button class="tabbtn" data-view="proactive">Proactive</button>
         <button class="tabbtn" data-view="diff">Difference</button>
-        <button class="tabbtn" data-view="rt_trend">Response Time (Trend)</button>
+        <button class="tabbtn" data-view="rt">Response Time</button>
       </div>
 
       <p class="small" style="margin-top:10px;">
-        <b>Hotspots</b>: brighter areas = more calls in that area (relative within the map).<br/>
-        <b>Proactive</b>: brighter areas = more proactive activity (relative within the map).<br/>
+        <b>Hotspots</b>: brighter areas indicate more calls in that area (relative within this map).<br/>
+        <b>Proactive</b>: brighter areas indicate more proactive activity (relative within this map).<br/>
         <b>Difference</b>: <b>red</b> = relatively more proactive than demand; <b>blue</b> = relatively less proactive than demand.<br/>
-        <b>Response time</b>: mean minutes from call received to first unit arrival (call→arrival).
+        <b>Response time</b>: mean minutes from call received to first unit arrival (call→arrival), systemwide shown explicitly.
       </p>
     </div>
 
     <div class="card" style="flex: 2 1 620px;">
-      <div class="imgwrap">
-        <img id="mainImg" alt="Dashboard output"/>
-      </div>
+      <img id="mainImg" alt="Dashboard output"/>
       <p class="small" id="missingNote" style="display:none;">
-        This view is unavailable for the selected time/call type (often due to low call counts).
+        This view is unavailable for the selected call type.
       </p>
     </div>
   </div>
@@ -78,55 +67,35 @@
 let manifest = null;
 let currentView = "hotspot";
 
-// Determine repo base for GitHub Pages project sites
 function getBasePath() {
   const parts = window.location.pathname.split("/").filter(Boolean);
   return parts.length ? `/${parts[0]}` : "";
 }
 
-// Always fetch from repo root manifest (path-safe)
-function manifestUrl() {
-  return `${getBasePath()}/manifest.json`;
+function imgPath(view, denom) {
+  const base = getBasePath();
+  if (view === "rt") return `${base}/rt/rt_alltime.png`;
+  return `${base}/maps/${view}_${denom}_all.png`;
 }
 
 function setActiveTab(view) {
   currentView = view;
-  document.querySelectorAll(".tabbtn").forEach(b => {
-    b.classList.toggle("active", b.dataset.view === view);
-  });
+  document.querySelectorAll(".tabbtn").forEach(b =>
+    b.classList.toggle("active", b.dataset.view === view)
+  );
   render();
-}
-
-function imagePath(view, denom, period) {
-  const base = getBasePath();
-
-  if (view === "rt_trend") {
-    // This file now includes systemwide + by-denom (colorblind palette) per your R update
-    return `${base}/rt/rt_by_denom_trend.png`;
-  }
-
-  return `${base}/maps/${view}_${denom}_${period}.png`;
 }
 
 function render() {
   if (!manifest) return;
 
   const denom = document.getElementById("denom").value;
-  const slider = document.getElementById("period");
-  const idx = parseInt(slider.value, 10);
-  const period = manifest.periods[idx];
-
-  const periodLabel = (period === "all") ? "All time" : period;
-  document.getElementById("periodLabel").textContent = periodLabel;
-  document.getElementById("modePill").textContent =
-    (period === "all") ? "All-time view" : `Year view: ${period}`;
-
   const img = document.getElementById("mainImg");
   const note = document.getElementById("missingNote");
-  const src = imagePath(currentView, denom, period);
+  const src = imgPath(currentView, denom);
 
   note.style.display = "none";
-  img.onload = () => { note.style.display = "none"; };
+  img.onload = () => note.style.display = "none";
   img.onerror = () => {
     img.removeAttribute("src");
     note.style.display = "block";
@@ -135,35 +104,26 @@ function render() {
 }
 
 async function init() {
-  const res = await fetch(manifestUrl(), { cache: "no-store" });
+  const res = await fetch(`${getBasePath()}/manifest.json`, { cache: "no-store" });
   manifest = await res.json();
 
   document.getElementById("buildstamp").textContent =
     `Built: ${manifest.generated_at || "unknown"}`;
 
-  // Populate denominators
   const denomSel = document.getElementById("denom");
-  denomSel.innerHTML = "";
-  (manifest.denominators || []).forEach(d => {
+  manifest.denominators.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d;
     opt.textContent = d;
     denomSel.appendChild(opt);
   });
-  denomSel.value = (manifest.denominators || [])[0] || "";
 
-  // Slider: discrete only (all + full years). ALWAYS start on all-time (index 0).
-  const slider = document.getElementById("period");
-  slider.min = 0;
-  slider.max = String((manifest.periods || []).length - 1);
-  slider.value = 0;
-
+  denomSel.value = manifest.denominators[0];
   denomSel.addEventListener("change", render);
-  slider.addEventListener("input", render);
 
-  document.querySelectorAll(".tabbtn").forEach(b => {
-    b.addEventListener("click", () => setActiveTab(b.dataset.view));
-  });
+  document.querySelectorAll(".tabbtn").forEach(b =>
+    b.addEventListener("click", () => setActiveTab(b.dataset.view))
+  );
 
   render();
 }
