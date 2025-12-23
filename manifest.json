@@ -1,0 +1,19 @@
+{
+  "generated_at": "2025-12-22 18:46:24.636998",
+  "denominators": ["burglary", "domestic_problem", "suspicious", "violent_crime"],
+  "periods": ["all", "2022", "2023", "2024", "2025"],
+  "years": ["2022", "2023", "2024", "2025"],
+  "alpha_steps": [0.2, 0.4, 0.6, 0.8],
+  "files": {
+    "hotspot": "docs/maps/hotspot_{denom}_{period}.png",
+    "proactive": "docs/maps/proactive_{denom}_{period}.png",
+    "diff": "docs/maps/diff_{denom}_{period}.png",
+    "hotspot_alpha": "docs/maps/hotspot_{denom}_{y0}_to_{y1}_aXX.png",
+    "proactive_alpha": "docs/maps/proactive_{denom}_{y0}_to_{y1}_aXX.png",
+    "diff_alpha": "docs/maps/diff_{denom}_{y0}_to_{y1}_aXX.png",
+    "rt_system_csv": "docs/tables/rt_system_annual.csv",
+    "rt_byden_csv": "docs/tables/rt_by_denom_annual.csv",
+    "rt_system_trend_png": "docs/rt/rt_system_trend.png",
+    "rt_byden_trend_png": "docs/rt/rt_by_denom_trend.png"
+  }
+}
