@@ -89,11 +89,6 @@ function manifestUrl() {
   return `${getBasePath()}/manifest.json`;
 }
 
-// Smooth slider scheme (uses alpha frames):
-// value 0  -> "all"
-// values 1.. -> segments between years using steps [0,20,40,60,80]
-const stepTags = [0, 20, 40, 60, 80];
-
 function setActiveTab(view) {
   currentView = view;
   document.querySelectorAll(".tabbtn").forEach(b => {
@@ -102,47 +97,15 @@ function setActiveTab(view) {
   render();
 }
 
-function pad2(n) { return String(n).padStart(2, "0"); }
-
-function computeSelection(v) {
-  if (v === 0) {
-    return { periodLabel: "All time", modeLabel: "All-time view", filePeriod: "all" };
-  }
-
-  const years = manifest.years; // ["2022","2023",...]
-  const k = v - 1;
-  const seg = Math.floor(k / stepTags.length); // 0..(years.length-2)
-  const sidx = k % stepTags.length;            // 0..4
-  const y0 = years[seg];
-  const y1 = years[seg + 1];
-  const alphaTag = stepTags[sidx];
-
-  const label = (alphaTag === 0 || !y1) ? y0 : `${y0} → ${y1} (${alphaTag}%)`;
-  return {
-    periodLabel: label,
-    modeLabel: `Year view: ${y0}`,
-    filePeriod: y0,
-    y0, y1, alphaTag
-  };
-}
-
-function imagePath(view, denom, sel) {
+function imagePath(view, denom, period) {
   const base = getBasePath();
 
   if (view === "rt_trend") {
-    // Show by-denominator trend (breakdown)
+    // This file now includes systemwide + by-denom (colorblind palette) per your R update
     return `${base}/rt/rt_by_denom_trend.png`;
   }
 
-  if (sel.filePeriod === "all") {
-    return `${base}/maps/${view}_${denom}_all.png`;
-  }
-
-  if (sel.alphaTag && sel.alphaTag > 0 && sel.y1) {
-    return `${base}/maps/${view}_${denom}_${sel.y0}_to_${sel.y1}_a${pad2(sel.alphaTag)}.png`;
-  }
-
-  return `${base}/maps/${view}_${denom}_${sel.filePeriod}.png`;
+  return `${base}/maps/${view}_${denom}_${period}.png`;
 }
 
 function render() {
@@ -150,18 +113,18 @@ function render() {
 
   const denom = document.getElementById("denom").value;
   const slider = document.getElementById("period");
-  const v = parseInt(slider.value, 10);
+  const idx = parseInt(slider.value, 10);
+  const period = manifest.periods[idx];
 
-  const sel = computeSelection(v);
-
-  document.getElementById("periodLabel").textContent = sel.periodLabel;
-  document.getElementById("modePill").textContent = sel.modeLabel;
+  const periodLabel = (period === "all") ? "All time" : period;
+  document.getElementById("periodLabel").textContent = periodLabel;
+  document.getElementById("modePill").textContent =
+    (period === "all") ? "All-time view" : `Year view: ${period}`;
 
   const img = document.getElementById("mainImg");
   const note = document.getElementById("missingNote");
-  const src = imagePath(currentView, denom, sel);
+  const src = imagePath(currentView, denom, period);
 
-  // Use img load/error (no HEAD requests)
   note.style.display = "none";
   img.onload = () => { note.style.display = "none"; };
   img.onerror = () => {
@@ -178,25 +141,22 @@ async function init() {
   document.getElementById("buildstamp").textContent =
     `Built: ${manifest.generated_at || "unknown"}`;
 
+  // Populate denominators
   const denomSel = document.getElementById("denom");
   denomSel.innerHTML = "";
-  manifest.denominators.forEach(d => {
+  (manifest.denominators || []).forEach(d => {
     const opt = document.createElement("option");
     opt.value = d;
     opt.textContent = d;
     denomSel.appendChild(opt);
   });
-  denomSel.value = manifest.denominators[0];
+  denomSel.value = (manifest.denominators || [])[0] || "";
 
-  // Slider: 0 = all-time; then (years.length-1) segments * 5 substeps
-  const years = manifest.years;
-  const segments = Math.max(0, years.length - 1);
-  const maxVal = segments * stepTags.length;
-
+  // Slider: discrete only (all + full years). ALWAYS start on all-time (index 0).
   const slider = document.getElementById("period");
   slider.min = 0;
-  slider.max = String(maxVal);
-  slider.value = 0; // ALWAYS start on all-time
+  slider.max = String((manifest.periods || []).length - 1);
+  slider.value = 0;
 
   denomSel.addEventListener("change", render);
   slider.addEventListener("input", render);
